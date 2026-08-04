@@ -2,9 +2,9 @@
 CONFIG_TARGET_qualcommax=y
 CONFIG_TARGET_qualcommax_ipq60xx=y
 
-# 仅保留这一台设备
+# 仅编译 jdcloud_re-ss-01
 CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-ss-01=y
 
-# 必要的全局选项
+# 多设备全局选项（保持单设备输出）
 CONFIG_TARGET_MULTI_PROFILE=y
 CONFIG_TARGET_PER_DEVICE_ROOTFS=y

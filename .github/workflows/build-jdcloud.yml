@@ -21,14 +21,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        CONFIG: [jdcloud_re-ss-01]          # 对应 Config/jdcloud_re-ss-01.txt
+        CONFIG: [jdcloud_re-ss-01]
         SOURCE: [VIKINGYFY/immortalwrt]
         BRANCH: [main]
 
     uses: ./.github/workflows/WRT-CORE.yml
     with:
       WRT_CONFIG: ${{matrix.CONFIG}}
-      WRT_THEME: alpha
+      WRT_THEME: argon                       # 默认主题改为 Argon
       WRT_NAME: SGXWRT
       WRT_SSID: OWRT
       WRT_WORD: 12345678
