@@ -4,6 +4,20 @@
 
 PKG_PATH="$GITHUB_WORKSPACE/wrt/package/"
 
+#===================================================================
+# 新增：预置北京大学 ImmortalWrt APK 镜像源
+# 编译出的固件将默认使用北大源，速度快，无需手动更换
+#===================================================================
+mkdir -p ./files/etc/apk
+cat > ./files/etc/apk/repositories <<'EOF'
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/%A/base
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/%A/luci
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/%A/packages
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/%A/routing
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/targets/%T/%t/packages
+EOF
+#===================================================================
+
 #预置HomeProxy数据
 if [ -d *"homeproxy"* ]; then
 	echo " "
