@@ -17,7 +17,7 @@ https://mirrors.pku.edu.cn/immortalwrt/snapshots/targets/%T/%t/packages
 EOF
 #===================================================================
 
-#预置HomeProxy数据
+#预置HomeProxy数据（若不再使用 homeproxy 则自动跳过）
 if [ -d *"homeproxy"* ]; then
 	echo " "
 
@@ -39,7 +39,7 @@ if [ -d *"homeproxy"* ]; then
 	cd $PKG_PATH && echo "homeproxy date has been updated!"
 fi
 
-#修改argon主题字体和颜色
+#修改argon主题字体和颜色（若未使用则自动跳过）
 if [ -d *"luci-theme-argon"* ]; then
 	echo " " && cd ./luci-theme-argon/
 
@@ -48,7 +48,7 @@ if [ -d *"luci-theme-argon"* ]; then
 	cd $PKG_PATH && echo "theme-argon has been fixed!"
 fi
 
-#修改aurora菜单式样
+#修改aurora菜单式样（若未使用则自动跳过）
 if [ -d *"luci-app-aurora-config"* ]; then
 	echo " " && cd ./luci-app-aurora-config/
 
@@ -58,27 +58,72 @@ if [ -d *"luci-app-aurora-config"* ]; then
 fi
 
 #===================================================================
-# 自定义 alpha 主题样式
+# 自定义 alpha 主题：视频背景 + 大字体
 #===================================================================
-# 1. 增大内容区域字体
 if [ -d *"luci-theme-alpha"* ]; then
 	echo " " && cd ./luci-theme-alpha/
-	cat >> ./htdocs/luci-static/alpha/css/style.css <<'EOF'
 
-/* 自定义：增大页面内容字体 */
+	# 1. 复制视频文件到固件
+	if [ -d "$GITHUB_WORKSPACE/custom/alpha/video" ]; then
+		mkdir -p ./files/www/luci-static/alpha/background/video
+		cp $GITHUB_WORKSPACE/custom/alpha/video/*.mp4 ./files/www/luci-static/alpha/background/video/
+		echo "Custom videos copied!"
+	fi
+
+	# 2. 修改登录页模板 sysauth.htm
+	SYSAUTH_HTM="./templates/alpha/sysauth.htm"
+	if [ -f "$SYSAUTH_HTM" ]; then
+		# 去掉 body 上的内联背景图
+		sed -i 's/style="background-image:url.*)"/style=""/g' "$SYSAUTH_HTM"
+		# 在 <body> 标签后插入登录视频（播放一次后定格）
+		sed -i '/<body.*>/a\
+<video id="bg-video" autoplay muted playsinline onended="this.pause()">\
+  <source src="/luci-static/alpha/background/video/bg_login.mp4" type="video/mp4">\
+</video>' "$SYSAUTH_HTM"
+		echo "Login video injected into sysauth.htm!"
+	fi
+
+	# 3. 修改后台头部模板 header.htm
+	HEADER_HTM="./templates/alpha/header.htm"
+	if [ -f "$HEADER_HTM" ]; then
+		# 在 <body> 标签后插入后台视频（循环播放）
+		sed -i '/<body.*>/a\
+<video id="bg-video" autoplay muted loop playsinline>\
+  <source src="/luci-static/alpha/background/video/bg_main.mp4" type="video/mp4">\
+</video>' "$HEADER_HTM"
+		echo "Main video injected into header.htm!"
+	fi
+
+	# 4. 追加 CSS：视频全屏背景 + 大字体
+	cat >> ./htdocs/luci-static/alpha/style/style.css <<'EOF'
+
+/* 视频背景通用设置 */
+#bg-video {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    min-width: 100%;
+    min-height: 100%;
+    width: auto;
+    height: auto;
+    z-index: -1;
+    object-fit: cover;
+}
+
+/* 强制清除 body 背景图，确保视频可见 */
+body {
+    background-image: none !important;
+    background-color: transparent !important;
+}
+
+/* 增大内容区域字体 */
 #maincontent .container {
     font-size: 15px;
 }
 EOF
-	cd $PKG_PATH && echo "theme-alpha font size increased!"
-fi
+	echo "Alpha theme styles applied!"
 
-# 2. 修改默认配色：活力橙 + 透明度保持1
-if [ -d *"luci-app-alpha-config"* ]; then
-	echo " " && cd ./luci-app-alpha-config/
-	sed -i "s/option primary .*/option primary '#FF6B35'/g" ./root/etc/config/alpha
-	sed -i "s/option transparency .*/option transparency '1'/g" ./root/etc/config/alpha
-	cd $PKG_PATH && echo "theme-alpha default color set to orange!"
+	cd $PKG_PATH && echo "theme-alpha fully customized!"
 fi
 #===================================================================
 
