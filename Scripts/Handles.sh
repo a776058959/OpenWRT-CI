@@ -5,8 +5,7 @@
 PKG_PATH="$GITHUB_WORKSPACE/wrt/package/"
 
 #===================================================================
-# 新增：预置北京大学 ImmortalWrt APK 镜像源
-# 编译出的固件将默认使用北大源，速度快，无需手动更换
+# 预置北京大学 ImmortalWrt APK 镜像源
 #===================================================================
 mkdir -p ./files/etc/apk
 cat > ./files/etc/apk/repositories <<'EOF'
@@ -57,6 +56,31 @@ if [ -d *"luci-app-aurora-config"* ]; then
 
 	cd $PKG_PATH && echo "theme-aurora has been fixed!"
 fi
+
+#===================================================================
+# 自定义 alpha 主题样式
+#===================================================================
+# 1. 增大内容区域字体
+if [ -d *"luci-theme-alpha"* ]; then
+	echo " " && cd ./luci-theme-alpha/
+	cat >> ./htdocs/luci-static/alpha/css/style.css <<'EOF'
+
+/* 自定义：增大页面内容字体 */
+#maincontent .container {
+    font-size: 15px;
+}
+EOF
+	cd $PKG_PATH && echo "theme-alpha font size increased!"
+fi
+
+# 2. 修改默认配色：活力橙 + 透明度保持1
+if [ -d *"luci-app-alpha-config"* ]; then
+	echo " " && cd ./luci-app-alpha-config/
+	sed -i "s/option primary .*/option primary '#FF6B35'/g" ./root/etc/config/alpha
+	sed -i "s/option transparency .*/option transparency '1'/g" ./root/etc/config/alpha
+	cd $PKG_PATH && echo "theme-alpha default color set to orange!"
+fi
+#===================================================================
 
 #修改mini-diskmanager菜单位置
 if [ -d *"luci-app-mini-diskmanager"* ]; then
