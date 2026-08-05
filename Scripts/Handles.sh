@@ -5,15 +5,31 @@
 PKG_PATH="$GITHUB_WORKSPACE/wrt/package/"
 
 #===================================================================
-# 预置北京大学 ImmortalWrt APK 镜像源
+# 预置北京大学 ImmortalWrt APK 镜像源（动态架构）
 #===================================================================
+CONFIG_FILE="$GITHUB_WORKSPACE/wrt/.config"
+ARCH=$(sed -n 's/^CONFIG_TARGET_SUFFIX="\(.*\)"/\1/p' "$CONFIG_FILE")
+[ -z "$ARCH" ] && ARCH=$(sed -n 's/^CONFIG_CPU_TYPE="\(.*\)"/\1/p' "$CONFIG_FILE")
+BOARD=$(sed -n 's/^CONFIG_TARGET_BOARD="\(.*\)"/\1/p' "$CONFIG_FILE")
+SUBTARGET=$(sed -n 's/^CONFIG_TARGET_SUBTARGET="\(.*\)"/\1/p' "$CONFIG_FILE")
+TARGET="${BOARD}/${SUBTARGET}"
+[ -z "$ARCH" ] && ARCH="aarch64_cortex-a53"
+[ -z "$BOARD" ] || [ -z "$SUBTARGET" ] && TARGET="qualcommax/ipq60xx"
+
 mkdir -p $GITHUB_WORKSPACE/wrt/files/etc/apk
-cat > $GITHUB_WORKSPACE/wrt/files/etc/apk/repositories <<'EOF'
-https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/%A/base
-https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/%A/luci
-https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/%A/packages
-https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/%A/routing
-https://mirrors.pku.edu.cn/immortalwrt/snapshots/targets/%T/%t/packages
+cat > $GITHUB_WORKSPACE/wrt/files/etc/apk/repositories <<EOF
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/${ARCH}/base/packages.adb
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/${ARCH}/luci/packages.adb
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/${ARCH}/packages/packages.adb
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/packages/${ARCH}/routing/packages.adb
+https://mirrors.pku.edu.cn/immortalwrt/snapshots/targets/${TARGET}/packages/packages.adb
+EOF
+
+# 写入注释内容，避免空文件导致 LuCI 报错
+mkdir -p $GITHUB_WORKSPACE/wrt/files/etc/apk/repositories.d
+cat > $GITHUB_WORKSPACE/wrt/files/etc/apk/repositories.d/distfeeds.list <<'EOF'
+# This file is auto-generated and build-specific, any changes will be intentionally lost in sysupgrade.
+# Add your custom feeds to /etc/apk/repositories.d/customfeeds.list
 EOF
 #===================================================================
 
@@ -33,13 +49,6 @@ if [ -d *"homeproxy"* ]; then
 	cd $PKG_PATH && echo "homeproxy date has been updated!"
 fi
 
-#修改argon主题默认样式（保留原逻辑，若不使用argon则自动跳过）
-if [ -d *"luci-theme-argon"* ]; then
-	echo " " && cd ./luci-theme-argon/
-	sed -i "s/primary '.*'/primary '#31a1a1'/; s/'0.2'/'0.5'/; s/'none'/'bing'/; s/'600'/'normal'/" ./luci-app-argon-config/root/etc/config/argon
-	cd $PKG_PATH && echo "theme-argon has been fixed!"
-fi
-
 #修改aurora菜单式样（保留）
 if [ -d *"luci-app-aurora-config"* ]; then
 	echo " " && cd ./luci-app-aurora-config/
@@ -48,30 +57,34 @@ if [ -d *"luci-app-aurora-config"* ]; then
 fi
 
 #===================================================================
-# 自定义 Argon 主题：视频背景 + 预置配置文件
+# 自定义 Argon 主题：视频背景 + 移除循环
 #===================================================================
 ARGON_DIR=$(find $GITHUB_WORKSPACE/wrt -maxdepth 4 -type d -iname "luci-theme-argon" | head -1)
 if [ -n "$ARGON_DIR" ]; then
 	echo "Found argon theme at: $ARGON_DIR"
 
-	# 复制视频文件
+	# 1. 复制视频文件
 	if [ -d "$GITHUB_WORKSPACE/custom/argon/video" ]; then
 		mkdir -p $GITHUB_WORKSPACE/wrt/files/www/luci-static/argon/background
 		cp $GITHUB_WORKSPACE/custom/argon/video/*.mp4 $GITHUB_WORKSPACE/wrt/files/www/luci-static/argon/background/
 		echo "Argon videos copied!"
 	fi
 
-	# 生成 argon 配置文件，设定视频背景（循环播放）
+	# 2. 生成 argon 配置文件，设定视频背景（使用 video_url）
 	mkdir -p $GITHUB_WORKSPACE/wrt/files/etc/config
 	cat > $GITHUB_WORKSPACE/wrt/files/etc/config/argon <<'ARGONEOF'
 config argon
 	option primary '#31a1a1'
 	option blur '0.5'
 	option background 'video'
-	option background_video '/luci-static/argon/background/bg_main.mp4'
+	option video_url '/luci-static/argon/background/bg_main.mp4'
 	option dark_mode 'auto'
 ARGONEOF
 	echo "Argon video config generated!"
+
+	# 3. 修改源码模板：移除视频 loop 属性，登录页播放一次后定格
+	find "$ARGON_DIR" -type f \( -name "*.htm" -o -name "*.uc" \) -exec sed -i 's/autoplay loop muted/autoplay muted onended="this.pause()"/g' {} \;
+	echo "Argon video loop removed in source templates!"
 else
 	echo "Warning: luci-theme-argon directory not found!"
 fi
