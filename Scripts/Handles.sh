@@ -57,36 +57,32 @@ if [ -d *"luci-app-aurora-config"* ]; then
 fi
 
 #===================================================================
-# 自定义 Argon 主题：视频背景 + 移除循环
+# 自定义 Argon 主题：移除视频循环 + 点击取消静音（不含视频文件）
 #===================================================================
-ARGON_DIR=$(find $GITHUB_WORKSPACE/wrt -maxdepth 4 -type d -iname "luci-theme-argon" | head -1)
-if [ -n "$ARGON_DIR" ]; then
-	echo "Found argon theme at: $ARGON_DIR"
+ARGON_DIR="$GITHUB_WORKSPACE/wrt/package/luci-theme-argon"
+if [ -d "$ARGON_DIR" ]; then
+    echo "Found argon theme at: $ARGON_DIR"
 
-	# 1. 复制视频文件
-	if [ -d "$GITHUB_WORKSPACE/custom/argon/video" ]; then
-		mkdir -p $GITHUB_WORKSPACE/wrt/files/www/luci-static/argon/background
-		cp $GITHUB_WORKSPACE/custom/argon/video/*.mp4 $GITHUB_WORKSPACE/wrt/files/www/luci-static/argon/background/
-		echo "Argon videos copied!"
-	fi
-
-	# 2. 生成 argon 配置文件，设定视频背景（使用 video_url）
-	mkdir -p $GITHUB_WORKSPACE/wrt/files/etc/config
-	cat > $GITHUB_WORKSPACE/wrt/files/etc/config/argon <<'ARGONEOF'
-config argon
-	option primary '#31a1a1'
-	option blur '0.5'
-	option background 'video'
-	option video_url '/luci-static/argon/background/bg_main.mp4'
-	option dark_mode 'auto'
-ARGONEOF
-	echo "Argon video config generated!"
-
-	# 3. 修改源码模板：移除视频 loop 属性，登录页播放一次后定格
-	find "$ARGON_DIR" -type f \( -name "*.htm" -o -name "*.uc" \) -exec sed -i 's/autoplay loop muted/autoplay muted onended="this.pause()"/g' {} \;
-	echo "Argon video loop removed in source templates!"
+    # 修改模板：移除 loop 属性，并添加点击取消静音
+    SYSAUTH="$ARGON_DIR/templates/argon/sysauth.htm"
+    if [ -f "$SYSAUTH" ]; then
+        # 去掉 loop，改为播放一次后暂停
+        sed -i 's/autoplay loop muted/autoplay muted onended="this.pause()"/g' "$SYSAUTH"
+        # 在音量控制脚本后插入：点击页面任意位置取消静音
+        sed -i '/volume-control.*click/,/});/ {
+            /});/a\
+document.body.addEventListener("click", function unmuteOnce() {\
+    var v = document.getElementById("video");\
+    if (v && v.muted) { v.muted = false; }\
+    document.body.removeEventListener("click", unmuteOnce);\
+}, { once: true });
+        }' "$SYSAUTH"
+        echo "Argon template patched!"
+    else
+        echo "Warning: sysauth.htm not found in $ARGON_DIR/templates/argon/"
+    fi
 else
-	echo "Warning: luci-theme-argon directory not found!"
+    echo "Warning: luci-theme-argon directory not found at $ARGON_DIR"
 fi
 #===================================================================
 
