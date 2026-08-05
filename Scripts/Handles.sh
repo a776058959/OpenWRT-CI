@@ -4,6 +4,14 @@
 
 PKG_PATH="$GITHUB_WORKSPACE/wrt/package/"
 
+# 修复 gettext-full 编译错误：补全缺失的 stdcountof.h 头文件
+GETTEXT_DIR="$GITHUB_WORKSPACE/wrt/build_dir/hostpkg/gettext-1.0/gettext-runtime/gnulib-lib"
+if [ ! -f "$GETTEXT_DIR/stdcountof.h" ]; then
+    mkdir -p "$GETTEXT_DIR"
+    curl -sL "https://raw.githubusercontent.com/coreutils/gnulib/master/lib/stdcountof.h" -o "$GETTEXT_DIR/stdcountof.h"
+    echo "stdcountof.h downloaded for gettext fix!"
+fi
+
 #===================================================================
 # 预置北京大学 ImmortalWrt APK 镜像源（动态架构）
 #===================================================================
