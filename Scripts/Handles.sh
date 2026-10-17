@@ -94,6 +94,19 @@ else
 fi
 #===================================================================
 
+#移除已过时的 miniupnpd 补丁（上游 2.3.11 已合入该修复，patch 再打会失败）
+#健壮性：目录不存在 / 补丁不存在 / 无权限删除，全部静默跳过，绝不让本段成为失败点
+for _mp_dir in ../feeds/packages/net/miniupnpd/patches ../feeds/packages/*/miniupnpd/patches; do
+    [ -d "$_mp_dir" ] || continue
+    _mp_patch="$_mp_dir/020-descr-filter-fix.patch"
+    if [ -f "$_mp_patch" ]; then
+        rm -f "$_mp_patch" 2>/dev/null || true
+        [ -f "$_mp_patch" ] || echo "miniupnpd obsolete patch removed!"
+    fi
+done
+unset _mp_dir _mp_patch
+true
+
 #修复TailScale配置文件冲突
 TS_FILE=$(find ../feeds/packages/ -maxdepth 3 -type f -wholename "*/tailscale/Makefile")
 if [ -f "$TS_FILE" ]; then
