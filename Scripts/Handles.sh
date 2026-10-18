@@ -2,8 +2,14 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-FEEDS_PATH="./feeds"
-PACKAGE_PATH="./package"
+# 路径自动探测：上游新版在 wrt/ 下执行（./feeds），旧版在 wrt/package/ 下执行（../feeds）
+if [ -d "./feeds" ]; then
+	FEEDS_PATH="./feeds"
+	PACKAGE_PATH="./package"
+else
+	FEEDS_PATH="../feeds"
+	PACKAGE_PATH="."
+fi
 
 #修补命令统一入口：FIX <名称> <守卫目录> <命令...>
 #守卫目录不存在时直接跳过，保证在 bash -e 下不中断
@@ -40,8 +46,12 @@ fi
 #   040-improve-logging.patch   -> 纯日志/帮助文案改进（无功能改动），行号已偏移 100+ 行
 #   010-upnp-igdv2-compat.patch 与 900-format-xml 仍可正常应用，保留
 # 健壮性：目录不存在 / 补丁不存在 / 无权限删除，全部静默跳过，绝不让本段成为失败点
+# 路径兼容：同时检查 ./feeds（上游新基准，cwd=wrt/）与 ../feeds（旧基准，cwd=wrt/package/）
 #===================================================================
-for _mp_dir in ../feeds/packages/net/miniupnpd/patches ../feeds/packages/*/miniupnpd/patches; do
+for _mp_dir in ./feeds/packages/net/miniupnpd/patches \
+               ../feeds/packages/net/miniupnpd/patches \
+               ./feeds/packages/*/miniupnpd/patches \
+               ../feeds/packages/*/miniupnpd/patches; do
     [ -d "$_mp_dir" ] || continue
     for _mp_name in 020-descr-filter-fix.patch 030-allow-private-fix.patch 040-improve-logging.patch; do
         _mp_patch="$_mp_dir/$_mp_name"
@@ -85,30 +95,36 @@ EOF
 #===================================================================
 # 预置 HomeProxy 数据（若不用则自动跳过）
 #===================================================================
-if [ -d *"homeproxy"* ]; then
+HP_DIR=$(find "$PACKAGE_PATH" -maxdepth 1 -type d -name "*homeproxy*" 2>/dev/null | head -1)
+if [ -n "$HP_DIR" ] && [ -d "$HP_DIR/root/etc/homeproxy" ]; then
 	echo " "
 	HP_RULE="surge"
-	HP_PATH="homeproxy/root/etc/homeproxy"
-	rm -rf ./$HP_PATH/resources/*
-	git clone -q --depth=1 --single-branch --branch "release" "https://github.com/Loyalsoldier/surge-rules.git" ./$HP_RULE/ || true
+	HP_PATH="$HP_DIR/root/etc/homeproxy"
+	rm -rf "$HP_PATH/resources/"* 2>/dev/null || true
+	git clone -q --depth=1 --single-branch --branch "release" "https://github.com/Loyalsoldier/surge-rules.git" "./$HP_RULE/" 2>/dev/null || true
 	if [ -d "./$HP_RULE" ]; then
-		cd ./$HP_RULE/ && RES_VER=$(git log -1 --pretty=format:'%s' | grep -o "[0-9]*")
-		echo $RES_VER | tee china_ip4.ver china_ip6.ver china_list.ver gfw_list.ver
-		awk -F, '/^IP-CIDR,/{print $2 > "china_ip4.txt"} /^IP-CIDR6,/{print $2 > "china_ip6.txt"}' cncidr.txt
-		sed 's/^\.//g' direct.txt > china_list.txt ; sed 's/^\.//g' gfw.txt > gfw_list.txt
-		mv -f ./{china_*,gfw_list}.{ver,txt} ../$HP_PATH/resources/
-		cd .. && rm -rf ./$HP_RULE/
-		cd $PACKAGE_PATH && echo "homeproxy date has been updated!"
+		(
+			cd "./$HP_RULE" || exit 0
+			RES_VER=$(git log -1 --pretty=format:'%s' | grep -o "[0-9]*")
+			echo $RES_VER | tee china_ip4.ver china_ip6.ver china_list.ver gfw_list.ver
+			awk -F, '/^IP-CIDR,/{print $2 > "china_ip4.txt"} /^IP-CIDR6,/{print $2 > "china_ip6.txt"}' cncidr.txt
+			sed 's/^\.//g' direct.txt > china_list.txt ; sed 's/^\.//g' gfw.txt > gfw_list.txt
+			mv -f ./{china_*,gfw_list}.{ver,txt} "$HP_PATH/resources/" 2>/dev/null || true
+		)
+		rm -rf "./$HP_RULE/"
+		echo "homeproxy date has been updated!"
 	fi
 fi
 
 #===================================================================
 # 修改 aurora 菜单式样
 #===================================================================
-if [ -d *"luci-app-aurora-config"* ]; then
-	echo " " && cd ./luci-app-aurora-config/
-	sed -i "s/nav_submenu_type '.*'/nav_submenu_type 'boxed-dropdown'/g" $(find ./root/usr/share/aurora/ -type f -name "*.template") 2>/dev/null || true
-	cd $PACKAGE_PATH && echo "theme-aurora has been fixed!"
+AURORA_DIR=$(find "$PACKAGE_PATH" -maxdepth 1 -type d -name "*luci-app-aurora-config*" 2>/dev/null | head -1)
+if [ -n "$AURORA_DIR" ] && [ -d "$AURORA_DIR/root/usr/share/aurora" ]; then
+	echo " "
+	find "$AURORA_DIR/root/usr/share/aurora/" -type f -name "*.template" \
+		-exec sed -i "s/nav_submenu_type '.*'/nav_submenu_type 'boxed-dropdown'/g" {} + 2>/dev/null || true
+	echo "theme-aurora has been fixed!"
 fi
 
 #===================================================================
@@ -143,7 +159,7 @@ fi
 #===================================================================
 # 修复 TailScale 配置文件冲突
 #===================================================================
-TS_FILE=$(find ../feeds/packages/ -maxdepth 3 -type f -wholename "*/tailscale/Makefile" 2>/dev/null)
+TS_FILE=$(find ./feeds/packages/ ../feeds/packages/ -maxdepth 3 -type f -wholename "*/tailscale/Makefile" 2>/dev/null | head -1)
 if [ -n "$TS_FILE" ] && [ -f "$TS_FILE" ]; then
 	echo " "
 	sed -i '/\/files/d' "$TS_FILE"
