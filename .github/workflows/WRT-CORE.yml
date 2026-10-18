@@ -44,6 +44,10 @@ on:
         required: false
         default: false
         type: boolean
+      WRT_WIFI:
+        description: '固件名中的 WIFI 标签（如 wifi-yes / wifi-no）。留空则从 WRT_CONFIG 文件名解析 WIFI-YES/NO 后缀。'
+        required: false
+        type: string
 
 env:
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -59,6 +63,7 @@ env:
   WRT_SOURCE: ${{inputs.WRT_SOURCE}}
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_TEST: ${{inputs.WRT_TEST}}
+  WRT_WIFI_INPUT: ${{inputs.WRT_WIFI}}
 
 jobs:
   core:
@@ -99,7 +104,12 @@ jobs:
           WRT_CACHE_BRANCH=${WRT_BRANCH//\//-}
           WRT_CACHE_TARGET="$WRT_TARGET-$WRT_SUBTARGET"
           WRT_CACHE_PREFIX="wrt-$WRT_CACHE_SOURCE-$WRT_CACHE_BRANCH-$WRT_CACHE_TARGET"
-          WRT_WIFI=$(grep -oE 'WIFI-(YES|NO)$' <<< "${WRT_CONFIG^^}" || true); WRT_WIFI=${WRT_WIFI:-none}
+          # 固件名 WIFI 标签：优先用调用方显式传入的 WRT_WIFI，留空则从配置文件名解析 WIFI-YES/NO 后缀
+          WRT_WIFI="${WRT_WIFI_INPUT:-}"
+          if [ -z "$WRT_WIFI" ]; then
+            WRT_WIFI=$(grep -oE 'WIFI-(YES|NO)$' <<< "${WRT_CONFIG^^}" || true)
+            WRT_WIFI=${WRT_WIFI:-none}
+          fi
 
           {
             echo "WRT_INFO=${WRT_SOURCE%%/*}"

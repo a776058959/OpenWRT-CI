@@ -39,3 +39,4 @@ jobs:
       WRT_SOURCE: ${{matrix.SOURCE}}
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       WRT_TEST: ${{inputs.TEST}}
+      WRT_WIFI: wifi-yes                     # 固件名保持 wifi-yes 标签
