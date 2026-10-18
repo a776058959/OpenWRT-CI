@@ -2,15 +2,56 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-PKG_PATH="$GITHUB_WORKSPACE/wrt/package/"
+FEEDS_PATH="./feeds"
+PACKAGE_PATH="./package"
 
+#修补命令统一入口：FIX <名称> <守卫目录> <命令...>
+#守卫目录不存在时直接跳过，保证在 bash -e 下不中断
+FIX() {
+	local NAME=$1
+	local GUARD=$2
+	shift 2
+
+	[ -d "$GUARD" ] || return 0
+
+	echo " "
+	if "$@"; then
+		echo "$NAME has been fixed!"
+	else
+		echo "$NAME fix failed; continuing!"
+	fi
+}
+
+#===================================================================
 # 修复 gettext-full 编译错误：补全缺失的 stdcountof.h 头文件
+#===================================================================
 GETTEXT_DIR="$GITHUB_WORKSPACE/wrt/build_dir/hostpkg/gettext-1.0/gettext-runtime/gnulib-lib"
 if [ ! -f "$GETTEXT_DIR/stdcountof.h" ]; then
     mkdir -p "$GETTEXT_DIR"
-    curl -sL "https://raw.githubusercontent.com/coreutils/gnulib/master/lib/stdcountof.h" -o "$GETTEXT_DIR/stdcountof.h"
+    curl -sL "https://raw.githubusercontent.com/coreutils/gnulib/master/lib/stdcountof.h" -o "$GETTEXT_DIR/stdcountof.h" || true
     echo "stdcountof.h downloaded for gettext fix!"
 fi
+
+#===================================================================
+# 移除已过时的 miniupnpd 补丁
+#   上游 2.3.11 已合入这些修复 / 已改动上下文，patch 再打必然失败：
+#   020-descr-filter-fix.patch  -> 重写权限行解析器，源码已含 iseol()/get_sep()/get_ushort()/get_range()
+#   030-allow-private-fix.patch -> ALLOWPRIVATEIPV4MASK 条件修正，源码 upnpsoap.c 已是修复后写法
+#   040-improve-logging.patch   -> 纯日志/帮助文案改进（无功能改动），行号已偏移 100+ 行
+#   010-upnp-igdv2-compat.patch 与 900-format-xml 仍可正常应用，保留
+# 健壮性：目录不存在 / 补丁不存在 / 无权限删除，全部静默跳过，绝不让本段成为失败点
+#===================================================================
+for _mp_dir in ../feeds/packages/net/miniupnpd/patches ../feeds/packages/*/miniupnpd/patches; do
+    [ -d "$_mp_dir" ] || continue
+    for _mp_name in 020-descr-filter-fix.patch 030-allow-private-fix.patch 040-improve-logging.patch; do
+        _mp_patch="$_mp_dir/$_mp_name"
+        [ -f "$_mp_patch" ] || continue
+        rm -f "$_mp_patch" 2>/dev/null || true
+        [ -f "$_mp_patch" ] || echo "miniupnpd obsolete patch removed: $_mp_name"
+    done
+done
+unset _mp_dir _mp_name _mp_patch
+true
 
 #===================================================================
 # 预置北京大学 ImmortalWrt APK 镜像源（动态架构）
@@ -41,27 +82,33 @@ cat > $GITHUB_WORKSPACE/wrt/files/etc/apk/repositories.d/distfeeds.list <<'EOF'
 EOF
 #===================================================================
 
-#预置HomeProxy数据（若不用则自动跳过）
+#===================================================================
+# 预置 HomeProxy 数据（若不用则自动跳过）
+#===================================================================
 if [ -d *"homeproxy"* ]; then
 	echo " "
 	HP_RULE="surge"
 	HP_PATH="homeproxy/root/etc/homeproxy"
 	rm -rf ./$HP_PATH/resources/*
-	git clone -q --depth=1 --single-branch --branch "release" "https://github.com/Loyalsoldier/surge-rules.git" ./$HP_RULE/
-	cd ./$HP_RULE/ && RES_VER=$(git log -1 --pretty=format:'%s' | grep -o "[0-9]*")
-	echo $RES_VER | tee china_ip4.ver china_ip6.ver china_list.ver gfw_list.ver
-	awk -F, '/^IP-CIDR,/{print $2 > "china_ip4.txt"} /^IP-CIDR6,/{print $2 > "china_ip6.txt"}' cncidr.txt
-	sed 's/^\.//g' direct.txt > china_list.txt ; sed 's/^\.//g' gfw.txt > gfw_list.txt
-	mv -f ./{china_*,gfw_list}.{ver,txt} ../$HP_PATH/resources/
-	cd .. && rm -rf ./$HP_RULE/
-	cd $PKG_PATH && echo "homeproxy date has been updated!"
+	git clone -q --depth=1 --single-branch --branch "release" "https://github.com/Loyalsoldier/surge-rules.git" ./$HP_RULE/ || true
+	if [ -d "./$HP_RULE" ]; then
+		cd ./$HP_RULE/ && RES_VER=$(git log -1 --pretty=format:'%s' | grep -o "[0-9]*")
+		echo $RES_VER | tee china_ip4.ver china_ip6.ver china_list.ver gfw_list.ver
+		awk -F, '/^IP-CIDR,/{print $2 > "china_ip4.txt"} /^IP-CIDR6,/{print $2 > "china_ip6.txt"}' cncidr.txt
+		sed 's/^\.//g' direct.txt > china_list.txt ; sed 's/^\.//g' gfw.txt > gfw_list.txt
+		mv -f ./{china_*,gfw_list}.{ver,txt} ../$HP_PATH/resources/
+		cd .. && rm -rf ./$HP_RULE/
+		cd $PACKAGE_PATH && echo "homeproxy date has been updated!"
+	fi
 fi
 
-#修改aurora菜单式样（保留）
+#===================================================================
+# 修改 aurora 菜单式样
+#===================================================================
 if [ -d *"luci-app-aurora-config"* ]; then
 	echo " " && cd ./luci-app-aurora-config/
-	sed -i "s/nav_submenu_type '.*'/nav_submenu_type 'boxed-dropdown'/g" $(find ./root/usr/share/aurora/ -type f -name "*.template")
-	cd $PKG_PATH && echo "theme-aurora has been fixed!"
+	sed -i "s/nav_submenu_type '.*'/nav_submenu_type 'boxed-dropdown'/g" $(find ./root/usr/share/aurora/ -type f -name "*.template") 2>/dev/null || true
+	cd $PACKAGE_PATH && echo "theme-aurora has been fixed!"
 fi
 
 #===================================================================
@@ -71,7 +118,6 @@ ARGON_DIR="$GITHUB_WORKSPACE/wrt/package/luci-theme-argon"
 if [ -d "$ARGON_DIR" ]; then
     echo "Found argon theme at: $ARGON_DIR"
 
-    # 修改模板：移除 loop 属性，并添加点击取消静音
     SYSAUTH="$ARGON_DIR/templates/argon/sysauth.htm"
     if [ -f "$SYSAUTH" ]; then
         # 去掉 loop，改为播放一次后暂停
@@ -94,37 +140,33 @@ else
 fi
 #===================================================================
 
-#移除已过时的 miniupnpd 补丁（上游 2.3.11 已合入这些修复 / 已改动上下文，patch 再打会失败）
-#  020-descr-filter-fix.patch  -> 重写权限行解析器，2.3.11 源码已含 iseol()/get_sep()
-#  030-allow-private-fix.patch -> ALLOWPRIVATEIPV4MASK 条件修正，2.3.11 源码已是修复后写法
-#  040-improve-logging.patch   -> 纯日志/帮助文案改进（无功能改动），2.3.11 的 miniupnpd.c
-#                                 行号已偏移 100+ 行，4/12 hunk 无法定位；删除不影响功能
-#  010-upnp-igdv2-compat.patch 与 900-format-xml 仍可正常应用，保留
-#健壮性：目录不存在 / 补丁不存在 / 无权限删除，全部静默跳过，绝不让本段成为失败点
-for _mp_dir in ../feeds/packages/net/miniupnpd/patches ../feeds/packages/*/miniupnpd/patches; do
-    [ -d "$_mp_dir" ] || continue
-    for _mp_name in 020-descr-filter-fix.patch 030-allow-private-fix.patch 040-improve-logging.patch; do
-        _mp_patch="$_mp_dir/$_mp_name"
-        [ -f "$_mp_patch" ] || continue
-        rm -f "$_mp_patch" 2>/dev/null || true
-        [ -f "$_mp_patch" ] || echo "miniupnpd obsolete patch removed: $_mp_name"
-    done
-done
-unset _mp_dir _mp_name _mp_patch
+#===================================================================
+# 修复 TailScale 配置文件冲突
+#===================================================================
+TS_FILE=$(find ../feeds/packages/ -maxdepth 3 -type f -wholename "*/tailscale/Makefile" 2>/dev/null)
+if [ -n "$TS_FILE" ] && [ -f "$TS_FILE" ]; then
+	echo " "
+	sed -i '/\/files/d' "$TS_FILE"
+	echo "tailscale has been fixed!"
+fi
+
+#===================================================================
+# 修复 Rust 编译失败
+#===================================================================
+FIX "rust" "$FEEDS_PATH/packages/lang/rust" sed -i 's/ci-llvm=true/ci-llvm=false/g' \
+	"$FEEDS_PATH/packages/lang/rust/Makefile"
+
+#===================================================================
+# 上游新增的修补项
+#===================================================================
+FIX "theme-argon" "$PACKAGE_PATH/luci-theme-argon" sed -i \
+	"s/primary '.*'/primary '#31a1a1'/g; s/'0.2'/'0.5'/g; s/'none'/'bing'/g; s/'600'/'normal'/g" \
+	"$PACKAGE_PATH/luci-theme-argon/luci-app-argon-config/root/etc/config/argon"
+
+FIX "mini-diskmanager" "$PACKAGE_PATH/luci-app-mini-diskmanager" sed -i "s/services/system/g" \
+	"$PACKAGE_PATH/luci-app-mini-diskmanager/luci-app-mini-diskmanager/root/usr/share/luci/menu.d/luci-app-mini-diskmanager.json"
+
+FIX "natmapt" "$PACKAGE_PATH/luci-app-natmapt" sed -i "s/network/services/g" \
+	"$PACKAGE_PATH/luci-app-natmapt/root/usr/share/luci/menu.d/luci-app-natmap.json"
+
 true
-
-#修复TailScale配置文件冲突
-TS_FILE=$(find ../feeds/packages/ -maxdepth 3 -type f -wholename "*/tailscale/Makefile")
-if [ -f "$TS_FILE" ]; then
-	echo " "
-	sed -i '/\/files/d' $TS_FILE
-	cd $PKG_PATH && echo "tailscale has been fixed!"
-fi
-
-#修复Rust编译失败
-RUST_FILE=$(find ../feeds/packages/ -maxdepth 3 -type f -wholename "*/rust/Makefile")
-if [ -f "$RUST_FILE" ]; then
-	echo " "
-	sed -i 's/ci-llvm=true/ci-llvm=false/g' $RUST_FILE
-	cd $PKG_PATH && echo "rust has been fixed!"
-fi
