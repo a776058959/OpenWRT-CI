@@ -94,17 +94,20 @@ else
 fi
 #===================================================================
 
-#移除已过时的 miniupnpd 补丁（上游 2.3.11 已合入该修复，patch 再打会失败）
+#移除已过时的 miniupnpd 补丁（上游 2.3.11 已合入这些修复，patch 再打会失败）
+#  020-descr-filter-fix.patch  -> 重写权限行解析器，2.3.11 源码已含 iseol()/get_sep()
+#  030-allow-private-fix.patch -> ALLOWPRIVATEIPV4MASK 条件修正，2.3.11 源码已是修复后写法
 #健壮性：目录不存在 / 补丁不存在 / 无权限删除，全部静默跳过，绝不让本段成为失败点
 for _mp_dir in ../feeds/packages/net/miniupnpd/patches ../feeds/packages/*/miniupnpd/patches; do
     [ -d "$_mp_dir" ] || continue
-    _mp_patch="$_mp_dir/020-descr-filter-fix.patch"
-    if [ -f "$_mp_patch" ]; then
+    for _mp_name in 020-descr-filter-fix.patch 030-allow-private-fix.patch; do
+        _mp_patch="$_mp_dir/$_mp_name"
+        [ -f "$_mp_patch" ] || continue
         rm -f "$_mp_patch" 2>/dev/null || true
-        [ -f "$_mp_patch" ] || echo "miniupnpd obsolete patch removed!"
-    fi
+        [ -f "$_mp_patch" ] || echo "miniupnpd obsolete patch removed: $_mp_name"
+    done
 done
-unset _mp_dir _mp_patch
+unset _mp_dir _mp_name _mp_patch
 true
 
 #修复TailScale配置文件冲突
