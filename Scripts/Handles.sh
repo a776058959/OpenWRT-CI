@@ -94,13 +94,16 @@ else
 fi
 #===================================================================
 
-#移除已过时的 miniupnpd 补丁（上游 2.3.11 已合入这些修复，patch 再打会失败）
+#移除已过时的 miniupnpd 补丁（上游 2.3.11 已合入这些修复 / 已改动上下文，patch 再打会失败）
 #  020-descr-filter-fix.patch  -> 重写权限行解析器，2.3.11 源码已含 iseol()/get_sep()
 #  030-allow-private-fix.patch -> ALLOWPRIVATEIPV4MASK 条件修正，2.3.11 源码已是修复后写法
+#  040-improve-logging.patch   -> 纯日志/帮助文案改进（无功能改动），2.3.11 的 miniupnpd.c
+#                                 行号已偏移 100+ 行，4/12 hunk 无法定位；删除不影响功能
+#  010-upnp-igdv2-compat.patch 与 900-format-xml 仍可正常应用，保留
 #健壮性：目录不存在 / 补丁不存在 / 无权限删除，全部静默跳过，绝不让本段成为失败点
 for _mp_dir in ../feeds/packages/net/miniupnpd/patches ../feeds/packages/*/miniupnpd/patches; do
     [ -d "$_mp_dir" ] || continue
-    for _mp_name in 020-descr-filter-fix.patch 030-allow-private-fix.patch; do
+    for _mp_name in 020-descr-filter-fix.patch 030-allow-private-fix.patch 040-improve-logging.patch; do
         _mp_patch="$_mp_dir/$_mp_name"
         [ -f "$_mp_patch" ] || continue
         rm -f "$_mp_patch" 2>/dev/null || true
